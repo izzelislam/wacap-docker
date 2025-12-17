@@ -1,0 +1,47 @@
+# =============================================================================
+# Wacap - WhatsApp API Docker Compose
+# =============================================================================
+#
+# Quick Start:
+#   1. Copy this file to your server
+#   2. Create .env file with JWT_SECRET
+#   3. Run: docker-compose -f docker-compose.standalone.yml up -d
+#
+# =============================================================================
+
+services:
+  wacap:
+    image: bangfkr/wacap:latest
+    container_name: wacap-app
+    ports:
+      - "${HOST_PORT:-3000}:3000"
+    volumes:
+      - wacap-data:/app/data
+    environment:
+      - JWT_SECRET=${JWT_SECRET:?JWT_SECRET is required}
+      - PORT=3000
+      - NODE_ENV=${NODE_ENV:-production}
+      - DATA_DIR=/app/data
+      - SESSIONS_PATH=/app/data/sessions
+      - DB_PATH=/app/data/wacap.db
+      - FRONTEND_URL=${FRONTEND_URL:-}
+      # Session management (optional)
+      - SESSION_CLEANUP_INTERVAL=${SESSION_CLEANUP_INTERVAL:-3600000}
+      - SESSION_MAX_AGE_MS=${SESSION_MAX_AGE_MS:-2592000000}
+      - SESSION_MAX_INACTIVE_MS=${SESSION_MAX_INACTIVE_MS:-604800000}
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  wacap-data:
+    driver: local

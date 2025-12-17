@@ -1,0 +1,95 @@
+# =============================================================================
+# Wacap Docker App - Docker Compose Configuration
+# =============================================================================
+# 
+# Usage:
+#   Development:  docker-compose up --build
+#   Production:   docker-compose -f docker-compose.yml up -d
+#   Stop:         docker-compose down
+#   View logs:    docker-compose logs -f
+#
+# =============================================================================
+
+version: '3.8'
+
+services:
+  wacap:
+    # Use pre-built image from Docker Hub
+    image: bangfkr/wacap:latest
+    # Or build locally (uncomment below and comment image above)
+    # build:
+    #   context: .
+    #   dockerfile: Dockerfile
+    container_name: wacap-app
+    
+    # Port mapping - change left side to use different host port
+    ports:
+      - "${HOST_PORT:-3000}:3000"
+    
+    # Volume mounting for data persistence
+    # This ensures SQLite database and WhatsApp sessions survive container restarts
+    volumes:
+      - wacap-data:/app/data
+    
+    # Environment variables
+    # Override these in .env file or via command line
+    environment:
+      # REQUIRED: JWT secret for authentication tokens
+      # Generate a secure random string for production
+      - JWT_SECRET=${JWT_SECRET:?JWT_SECRET is required}
+      
+      # Server configuration
+      - PORT=3000
+      - NODE_ENV=${NODE_ENV:-production}
+      
+      # Data paths (inside container)
+      - DATA_DIR=/app/data
+      - SESSIONS_PATH=/app/data/sessions
+      - DB_PATH=/app/data/wacap.db
+      
+      # Frontend URL for CORS (optional)
+      - FRONTEND_URL=${FRONTEND_URL:-}
+    
+    # Restart policy
+    # unless-stopped: restart always except when explicitly stopped
+    restart: unless-stopped
+    
+    # Health check configuration
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+    
+    # Resource limits (optional, uncomment to enable)
+    # deploy:
+    #   resources:
+    #     limits:
+    #       cpus: '1'
+    #       memory: 512M
+    #     reservations:
+    #       cpus: '0.25'
+    #       memory: 128M
+    
+    # Logging configuration
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+# Named volumes for data persistence
+volumes:
+  wacap-data:
+    driver: local
+    # Optional: specify a custom location on host
+    # driver_opts:
+    #   type: none
+    #   o: bind
+    #   device: /path/to/your/data
+
+# Optional: Network configuration for multi-container setups
+# networks:
+#   wacap-network:
+#     driver: bridge
