@@ -1,6 +1,6 @@
 import { Response } from 'express';
 import { AuthenticatedRequest } from '../auth/auth.middleware';
-import { messagingService, SendTextRequest, SendMediaRequest, SendLocationRequest, SendContactRequest } from './messaging.service';
+import { messagingService, SendTextRequest, SendMediaRequest, SendLocationRequest, SendContactRequest, SendPresenceRequest, MarkAsReadRequest } from './messaging.service';
 
 /**
  * Controller for messaging endpoints
@@ -435,6 +435,125 @@ export class MessagingController {
           code: 'INTERNAL_ERROR',
           message: 'Failed to send contact',
         },
+      });
+    }
+  }
+
+  /**
+   * Send presence update (typing, recording, online, offline)
+   * POST /api/send/presence
+   */
+  async sendPresence(req: AuthenticatedRequest, res: Response): Promise<void> {
+    try {
+      const userId = req.user?.userId;
+
+      if (!userId) {
+        res.status(401).json({
+          success: false,
+          error: { code: 'UNAUTHORIZED', message: 'Authentication required' },
+        });
+        return;
+      }
+
+      const { sessionId, to, presence } = req.body;
+
+      if (!sessionId || typeof sessionId !== 'string') {
+        res.status(400).json({
+          success: false,
+          error: { code: 'VALIDATION_ERROR', message: 'sessionId is required' },
+        });
+        return;
+      }
+
+      const validPresences = ['available', 'unavailable', 'composing', 'recording', 'paused'];
+      if (!presence || !validPresences.includes(presence)) {
+        res.status(400).json({
+          success: false,
+          error: { code: 'VALIDATION_ERROR', message: `presence must be one of: ${validPresences.join(', ')}` },
+        });
+        return;
+      }
+
+      const request: SendPresenceRequest = { sessionId, to, presence };
+      const result = await messagingService.sendPresence(userId, request);
+
+      if (!result.success) {
+        res.status(400).json({
+          success: false,
+          error: { code: 'SEND_ERROR', message: result.error || 'Failed to send presence' },
+        });
+        return;
+      }
+
+      res.json({ success: true });
+    } catch (error) {
+      console.error('Send presence controller error:', error);
+      res.status(500).json({
+        success: false,
+        error: { code: 'INTERNAL_ERROR', message: 'Failed to send presence' },
+      });
+    }
+  }
+
+  /**
+   * Mark messages as read
+   * POST /api/send/read
+   */
+  async markAsRead(req: AuthenticatedRequest, res: Response): Promise<void> {
+    try {
+      const userId = req.user?.userId;
+
+      if (!userId) {
+        res.status(401).json({
+          success: false,
+          error: { code: 'UNAUTHORIZED', message: 'Authentication required' },
+        });
+        return;
+      }
+
+      const { sessionId, to, messageIds } = req.body;
+
+      if (!sessionId || typeof sessionId !== 'string') {
+        res.status(400).json({
+          success: false,
+          error: { code: 'VALIDATION_ERROR', message: 'sessionId is required' },
+        });
+        return;
+      }
+
+      if (!to || typeof to !== 'string') {
+        res.status(400).json({
+          success: false,
+          error: { code: 'VALIDATION_ERROR', message: 'to (phone number) is required' },
+        });
+        return;
+      }
+
+      if (!Array.isArray(messageIds) || messageIds.length === 0) {
+        res.status(400).json({
+          success: false,
+          error: { code: 'VALIDATION_ERROR', message: 'messageIds array is required' },
+        });
+        return;
+      }
+
+      const request: MarkAsReadRequest = { sessionId, to, messageIds };
+      const result = await messagingService.markAsRead(userId, request);
+
+      if (!result.success) {
+        res.status(400).json({
+          success: false,
+          error: { code: 'SEND_ERROR', message: result.error || 'Failed to mark as read' },
+        });
+        return;
+      }
+
+      res.json({ success: true });
+    } catch (error) {
+      console.error('Mark as read controller error:', error);
+      res.status(500).json({
+        success: false,
+        error: { code: 'INTERNAL_ERROR', message: 'Failed to mark as read' },
       });
     }
   }

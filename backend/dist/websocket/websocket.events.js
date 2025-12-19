@@ -6,8 +6,10 @@ exports.getSessionStatus = getSessionStatus;
 exports.updateSessionStatus = updateSessionStatus;
 exports.removeSessionStatus = removeSessionStatus;
 exports.getAllSessionStatuses = getAllSessionStatuses;
+exports.syncSessionStatuses = syncSessionStatuses;
 const wacap_wrapper_1 = require("@pakor/wacap-wrapper");
 const websocket_service_1 = require("./websocket.service");
+const webhook_service_1 = require("../webhooks/webhook.service");
 const sessionStatusMap = new Map();
 /**
  * Setup Wacap event handlers that forward events to WebSocket clients
@@ -31,6 +33,8 @@ function setupWacapEventHandlers(wacap, io) {
         const event = { sessionId, qr, qrBase64 };
         (0, websocket_service_1.sendToSession)(io, sessionId, 'session:qr', event);
         (0, websocket_service_1.broadcast)(io, 'session:qr', event);
+        // Trigger webhook
+        webhook_service_1.webhookService.trigger('session.qr', sessionId, { qr, qrBase64 });
     });
     // Connection update event
     wacap.onGlobal(wacap_wrapper_1.WacapEventType.CONNECTION_UPDATE, (data) => {
@@ -81,6 +85,11 @@ function setupWacapEventHandlers(wacap, io) {
         };
         (0, websocket_service_1.sendToSession)(io, sessionId, 'session:connected', event);
         (0, websocket_service_1.broadcast)(io, 'session:connected', event);
+        // Trigger webhook
+        webhook_service_1.webhookService.trigger('session.connected', sessionId, {
+            phoneNumber: info?.phoneNumber,
+            userName: info?.userName,
+        });
     });
     // Connection close event
     wacap.onGlobal(wacap_wrapper_1.WacapEventType.CONNECTION_CLOSE, (data) => {
@@ -99,6 +108,10 @@ function setupWacapEventHandlers(wacap, io) {
         };
         (0, websocket_service_1.sendToSession)(io, sessionId, 'session:disconnected', event);
         (0, websocket_service_1.broadcast)(io, 'session:disconnected', event);
+        // Trigger webhook
+        webhook_service_1.webhookService.trigger('session.disconnected', sessionId, {
+            error: error?.message,
+        });
     });
     // Message received event
     wacap.onGlobal(wacap_wrapper_1.WacapEventType.MESSAGE_RECEIVED, (data) => {
@@ -108,21 +121,78 @@ function setupWacapEventHandlers(wacap, io) {
         const from = data.from;
         const messageType = data.messageType;
         const isFromMe = data.isFromMe;
-        console.log(`[WS Event] Message received on session ${sessionId} from ${from}`);
+        // New fields from wacap-wrapper 1.0.5
+        const replyTo = data.replyTo || from;
+        const phoneNumber = data.phoneNumber || null;
+        const isLid = data.isLid || from?.endsWith('@lid') || false;
+        const participant = data.participant || null;
+        console.log(`[WS Event] Message received on session ${sessionId} from ${from}, replyTo: ${replyTo}`);
+        // Extract detailed message info (WAHA-style)
+        const key = message?.key || {};
+        const messageContent = message?.message || {};
+        const pushName = message?.pushName || '';
+        // Determine chat type
+        const isGroup = from?.endsWith('@g.us') || false;
+        const isStatus = from?.endsWith('@broadcast') || false;
+        // Extract media info if present
+        const mediaMessage = messageContent?.imageMessage ||
+            messageContent?.videoMessage ||
+            messageContent?.audioMessage ||
+            messageContent?.documentMessage ||
+            messageContent?.stickerMessage || null;
+        const hasMedia = !!mediaMessage;
+        const mediaInfo = hasMedia ? {
+            mimetype: mediaMessage?.mimetype || null,
+            fileLength: mediaMessage?.fileLength || null,
+            fileName: mediaMessage?.fileName || null,
+            caption: mediaMessage?.caption || null,
+            url: mediaMessage?.url || null,
+        } : null;
+        // Build comprehensive webhook payload (WAHA-style)
+        // replyTo and phoneNumber now come from wacap-wrapper which handles LID conversion
+        const webhookPayload = {
+            id: key?.id || '',
+            from: from || '',
+            to: key?.remoteJid || '',
+            // replyTo: The JID to use when replying to this message (from wrapper, handles LID)
+            replyTo,
+            // phoneNumber: Extracted phone number if available (from wrapper)
+            phoneNumber,
+            body: body || '',
+            hasMedia,
+            mediaInfo,
+            timestamp: Number(message?.messageTimestamp) || Date.now(),
+            isFromMe: isFromMe || false,
+            isGroup,
+            isStatus,
+            isLid,
+            participant: isGroup ? participant : null,
+            pushName,
+            messageType: messageType || 'unknown',
+            // Raw message for advanced usage
+            _data: {
+                key,
+                message: messageContent,
+                messageTimestamp: message?.messageTimestamp,
+                status: message?.status,
+            },
+        };
         // Forward all messages (including from self for confirmation)
         const event = {
             sessionId,
             message: {
-                id: message?.key?.id || '',
+                id: key?.id || '',
                 from,
                 body: body || '',
                 messageType: messageType || 'unknown',
-                timestamp: message?.messageTimestamp || Date.now(),
+                timestamp: Number(message?.messageTimestamp) || Date.now(),
                 isFromMe: isFromMe || false,
             },
         };
         (0, websocket_service_1.sendToSession)(io, sessionId, 'message:received', event);
         (0, websocket_service_1.broadcast)(io, 'message:received', event);
+        // Trigger webhook with comprehensive data
+        webhook_service_1.webhookService.trigger('message.received', sessionId, webhookPayload);
     });
     // Session error event
     wacap.onGlobal(wacap_wrapper_1.WacapEventType.SESSION_ERROR, (data) => {
@@ -168,11 +238,49 @@ function removeSessionStatus(sessionId) {
 function getAllSessionStatuses() {
     return new Map(sessionStatusMap);
 }
+/**
+ * Sync session statuses from WacapWrapper on startup
+ * This ensures status map is populated with existing sessions
+ */
+async function syncSessionStatuses(wacap) {
+    try {
+        // Get all active sessions from wacap
+        const activeSessions = wacap.sessions.list();
+        console.log(`[WS Events] Syncing ${activeSessions.length} session statuses`);
+        for (const sessionId of activeSessions) {
+            const info = wacap.getSessionInfo(sessionId);
+            if (info) {
+                // Map wacap status to our status type
+                const infoStatus = String(info.status || '');
+                let status = 'disconnected';
+                if (infoStatus === 'open' || infoStatus === 'connected') {
+                    status = 'connected';
+                }
+                else if (infoStatus === 'connecting') {
+                    status = 'connecting';
+                }
+                else if (infoStatus === 'qr') {
+                    status = 'qr';
+                }
+                sessionStatusMap.set(sessionId, {
+                    status,
+                    phoneNumber: info.phoneNumber,
+                    userName: info.userName,
+                });
+                console.log(`[WS Events] Synced session ${sessionId}: ${status}`);
+            }
+        }
+    }
+    catch (error) {
+        console.error('[WS Events] Error syncing session statuses:', error);
+    }
+}
 exports.websocketEvents = {
     setupWacapEventHandlers,
     getSessionStatus,
     updateSessionStatus,
     removeSessionStatus,
-    getAllSessionStatuses
+    getAllSessionStatuses,
+    syncSessionStatuses
 };
 //# sourceMappingURL=websocket.events.js.map

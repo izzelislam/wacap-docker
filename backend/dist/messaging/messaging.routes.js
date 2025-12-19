@@ -36,4 +36,14 @@ exports.messagingRouter.post('/location', (req, res) => messaging_controller_1.m
  * Requirements: 4.5
  */
 exports.messagingRouter.post('/contact', (req, res) => messaging_controller_1.messagingController.sendContact(req, res));
+/**
+ * POST /api/send/presence
+ * Send presence update (typing, recording, online, offline)
+ */
+exports.messagingRouter.post('/presence', (req, res) => messaging_controller_1.messagingController.sendPresence(req, res));
+/**
+ * POST /api/send/read
+ * Mark messages as read
+ */
+exports.messagingRouter.post('/read', (req, res) => messaging_controller_1.messagingController.markAsRead(req, res));
 //# sourceMappingURL=messaging.routes.js.map

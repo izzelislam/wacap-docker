@@ -33,6 +33,16 @@ export interface SendContactRequest {
         organization?: string;
     };
 }
+export interface SendPresenceRequest {
+    sessionId: string;
+    to?: string;
+    presence: 'available' | 'unavailable' | 'composing' | 'recording' | 'paused';
+}
+export interface MarkAsReadRequest {
+    sessionId: string;
+    to: string;
+    messageIds: string[];
+}
 /**
  * Response interface for send operations
  */
@@ -67,6 +77,14 @@ export declare class MessagingService {
      * Requirements: 4.5
      */
     sendContact(userId: number, request: SendContactRequest): Promise<SendMessageResponse>;
+    /**
+     * Send presence update (typing, recording, online, offline)
+     */
+    sendPresence(userId: number, request: SendPresenceRequest): Promise<SendMessageResponse>;
+    /**
+     * Mark messages as read
+     */
+    markAsRead(userId: number, request: MarkAsReadRequest): Promise<SendMessageResponse>;
 }
 export declare const messagingService: MessagingService;
 //# sourceMappingURL=messaging.service.d.ts.map

@@ -12,6 +12,7 @@
 services:
   wacap:
     image: bangfkr/wacap:latest
+    pull_policy: always
     container_name: wacap-app
     ports:
       - "${HOST_PORT:-3000}:3000"

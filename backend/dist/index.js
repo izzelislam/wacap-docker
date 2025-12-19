@@ -14,10 +14,12 @@ const database_1 = require("./database");
 const auth_1 = require("./auth");
 const device_tokens_1 = require("./device-tokens");
 const sessions_1 = require("./sessions");
+const session_manager_1 = require("./sessions/session-manager");
 const messaging_1 = require("./messaging");
 const websocket_1 = require("./websocket");
 const health_1 = require("./health");
 const docs_1 = require("./docs");
+const webhooks_1 = require("./webhooks");
 const app = (0, express_1.default)();
 exports.app = app;
 const httpServer = (0, http_1.createServer)(app);
@@ -34,10 +36,27 @@ exports.io = io;
 // Setup WebSocket with authentication
 (0, websocket_1.setupWebSocket)(io);
 // Initialize WacapWrapper and setup event handlers
-(0, sessions_1.initWacap)(io).then((wacap) => {
+(0, sessions_1.initWacap)(io).then(async (wacap) => {
     console.log('WacapWrapper initialized successfully');
     // Setup Wacap event handlers for WebSocket forwarding
     (0, websocket_1.setupWacapEventHandlers)(wacap, io);
+    // Sync existing session statuses from wacap
+    try {
+        const { syncSessionStatuses } = require('./websocket/websocket.events');
+        await syncSessionStatuses(wacap);
+        console.log('Session statuses synced successfully');
+    }
+    catch (error) {
+        console.error('Failed to sync session statuses:', error);
+    }
+    // Initialize session manager for auto-start and cleanup
+    try {
+        await session_manager_1.sessionManager.initialize();
+        console.log('Session manager initialized successfully');
+    }
+    catch (error) {
+        console.error('Failed to initialize session manager:', error);
+    }
 }).catch((error) => {
     console.error('Failed to initialize WacapWrapper:', error);
 });
@@ -66,6 +85,8 @@ app.use('/api/tokens', device_tokens_1.deviceTokenRouter);
 app.use('/api/sessions', sessions_1.sessionRouter);
 // Messaging routes
 app.use('/api/send', messaging_1.messagingRouter);
+// Webhook routes
+app.use('/api/webhooks', webhooks_1.webhookRouter);
 // Serve static files in production
 // Frontend build is copied to ./public in Docker image
 if (process.env.NODE_ENV === 'production') {

@@ -41,6 +41,18 @@ export interface SendContactRequest {
   };
 }
 
+export interface SendPresenceRequest {
+  sessionId: string;
+  to?: string;
+  presence: 'available' | 'unavailable' | 'composing' | 'recording' | 'paused';
+}
+
+export interface MarkAsReadRequest {
+  sessionId: string;
+  to: string;
+  messageIds: string[];
+}
+
 /**
  * Response interface for send operations
  */
@@ -332,6 +344,108 @@ export class MessagingService {
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Failed to send contact',
+      };
+    }
+  }
+
+  /**
+   * Send presence update (typing, recording, online, offline)
+   */
+  async sendPresence(userId: number, request: SendPresenceRequest): Promise<SendMessageResponse> {
+    const { sessionId, to, presence } = request;
+
+    // Verify session ownership and get session info
+    const session = sessionService.get(userId, sessionId);
+    if (!session) {
+      return {
+        success: false,
+        error: 'Session not found or access denied',
+      };
+    }
+
+    // Check if session is connected
+    if (session.status !== 'connected') {
+      return {
+        success: false,
+        error: `Session is not connected. Current status: ${session.status}`,
+      };
+    }
+
+    // Format phone number to JID if provided
+    let jid: string | null = null;
+    if (to) {
+      try {
+        jid = formatPhoneNumber(to);
+      } catch (error) {
+        return {
+          success: false,
+          error: error instanceof Error ? error.message : 'Invalid phone number',
+        };
+      }
+    }
+
+    try {
+      const wacap = getWacap();
+      await wacap.presence.update(sessionId, jid, presence);
+
+      return {
+        success: true,
+      };
+    } catch (error) {
+      console.error('Send presence error:', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to send presence',
+      };
+    }
+  }
+
+  /**
+   * Mark messages as read
+   */
+  async markAsRead(userId: number, request: MarkAsReadRequest): Promise<SendMessageResponse> {
+    const { sessionId, to, messageIds } = request;
+
+    // Verify session ownership and get session info
+    const session = sessionService.get(userId, sessionId);
+    if (!session) {
+      return {
+        success: false,
+        error: 'Session not found or access denied',
+      };
+    }
+
+    // Check if session is connected
+    if (session.status !== 'connected') {
+      return {
+        success: false,
+        error: `Session is not connected. Current status: ${session.status}`,
+      };
+    }
+
+    // Format phone number to JID
+    let jid: string;
+    try {
+      jid = formatPhoneNumber(to);
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Invalid phone number',
+      };
+    }
+
+    try {
+      const wacap = getWacap();
+      await wacap.chat.markAsRead(sessionId, jid, messageIds);
+
+      return {
+        success: true,
+      };
+    } catch (error) {
+      console.error('Mark as read error:', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to mark as read',
       };
     }
   }

@@ -72,12 +72,18 @@ export declare function removeSessionStatus(sessionId: string): void;
  * Get all session statuses
  */
 export declare function getAllSessionStatuses(): Map<string, SessionStatus>;
+/**
+ * Sync session statuses from WacapWrapper on startup
+ * This ensures status map is populated with existing sessions
+ */
+export declare function syncSessionStatuses(wacap: WacapWrapper): Promise<void>;
 export declare const websocketEvents: {
     setupWacapEventHandlers: typeof setupWacapEventHandlers;
     getSessionStatus: typeof getSessionStatus;
     updateSessionStatus: typeof updateSessionStatus;
     removeSessionStatus: typeof removeSessionStatus;
     getAllSessionStatuses: typeof getAllSessionStatuses;
+    syncSessionStatuses: typeof syncSessionStatuses;
 };
 export {};
 //# sourceMappingURL=websocket.events.d.ts.map

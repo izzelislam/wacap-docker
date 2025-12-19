@@ -29,6 +29,16 @@ export declare class MessagingController {
      * Requirements: 4.5
      */
     sendContact(req: AuthenticatedRequest, res: Response): Promise<void>;
+    /**
+     * Send presence update (typing, recording, online, offline)
+     * POST /api/send/presence
+     */
+    sendPresence(req: AuthenticatedRequest, res: Response): Promise<void>;
+    /**
+     * Mark messages as read
+     * POST /api/send/read
+     */
+    markAsRead(req: AuthenticatedRequest, res: Response): Promise<void>;
 }
 export declare const messagingController: MessagingController;
 //# sourceMappingURL=messaging.controller.d.ts.map

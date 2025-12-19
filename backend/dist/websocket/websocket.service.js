@@ -85,6 +85,33 @@ function setupWebSocket(io) {
             const sessionRoom = `session:${sessionId}`;
             socket.join(sessionRoom);
             console.log(`[WebSocket] User ${email} subscribed to session ${sessionId}`);
+            // Send current session status to the subscriber
+            const { getSessionStatus } = require('./websocket.events');
+            const status = getSessionStatus(sessionId);
+            if (status) {
+                // Send current status
+                socket.emit('session:status', {
+                    sessionId,
+                    status: status.status,
+                    error: status.error
+                });
+                // If connected, send connected event with phone info
+                if (status.status === 'connected') {
+                    socket.emit('session:connected', {
+                        sessionId,
+                        phoneNumber: status.phoneNumber,
+                        userName: status.userName
+                    });
+                }
+                // If QR available, send QR event
+                if (status.status === 'qr' && status.qrBase64) {
+                    socket.emit('session:qr', {
+                        sessionId,
+                        qr: status.qrCode,
+                        qrBase64: status.qrBase64
+                    });
+                }
+            }
         });
         // Handle session unsubscription
         socket.on('session:unsubscribe', (sessionId) => {

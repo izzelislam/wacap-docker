@@ -17,7 +17,7 @@ RUN apk add --no-cache python3 make g++ wget
 FROM base AS backend-deps
 WORKDIR /app/backend
 COPY backend/package*.json ./
-RUN npm ci --only=production
+RUN npm ci --omit=dev
 
 # -----------------------------------------------------------------------------
 # Backend build stage

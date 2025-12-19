@@ -3,6 +3,40 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.sessionService = exports.SessionService = void 0;
 const UserSessionRepository_1 = require("../database/repositories/UserSessionRepository");
 const wacap_1 = require("./wacap");
+const websocket_events_1 = require("../websocket/websocket.events");
+/**
+ * Get combined session status from websocket events and wacap
+ */
+function getSessionStatus(sessionId) {
+    // First check websocket events status (most up-to-date)
+    const wsStatus = (0, websocket_events_1.getSessionStatus)(sessionId);
+    if (wsStatus) {
+        return {
+            status: wsStatus.status,
+            phoneNumber: wsStatus.phoneNumber,
+            userName: wsStatus.userName,
+            qrCode: wsStatus.qrCode,
+            qrBase64: wsStatus.qrBase64,
+            error: wsStatus.error,
+        };
+    }
+    // Fallback to wacap session info
+    try {
+        const wacap = (0, wacap_1.getWacap)();
+        const info = wacap.sessions.info(sessionId);
+        if (info) {
+            return {
+                status: info.status || 'disconnected',
+                phoneNumber: info.phoneNumber,
+                userName: info.userName,
+            };
+        }
+    }
+    catch {
+        // Wacap not initialized or session not found
+    }
+    return null;
+}
 /**
  * Service for WhatsApp session operations
  * Requirements: 3.1, 3.4, 3.5
@@ -35,7 +69,7 @@ class SessionService {
         const wacap = (0, wacap_1.getWacap)();
         await wacap.sessions.start(sessionId);
         // Get current status
-        const status = (0, wacap_1.getSessionStatus)(sessionId);
+        const status = getSessionStatus(sessionId);
         const info = wacap.sessions.info(sessionId);
         return {
             id: userSession.id,
@@ -59,7 +93,7 @@ class SessionService {
         const userSessions = this.repository.list(userId);
         const wacap = (0, wacap_1.getWacap)();
         return userSessions.map((session) => {
-            const status = (0, wacap_1.getSessionStatus)(session.session_id);
+            const status = getSessionStatus(session.session_id);
             const info = wacap.sessions.info(session.session_id);
             return {
                 id: session.id,
@@ -83,7 +117,7 @@ class SessionService {
             return null;
         }
         const wacap = (0, wacap_1.getWacap)();
-        const status = (0, wacap_1.getSessionStatus)(sessionId);
+        const status = getSessionStatus(sessionId);
         const info = wacap.sessions.info(sessionId);
         return {
             id: userSession.id,
@@ -144,7 +178,7 @@ class SessionService {
         if (!this.repository.belongsToUser(userId, sessionId)) {
             return null;
         }
-        const status = (0, wacap_1.getSessionStatus)(sessionId);
+        const status = getSessionStatus(sessionId);
         if (!status) {
             return null;
         }
@@ -174,7 +208,7 @@ class SessionService {
         // Start the session (will auto-reconnect if credentials exist)
         await wacap.sessions.start(sessionId);
         // Get current status
-        const status = (0, wacap_1.getSessionStatus)(sessionId);
+        const status = getSessionStatus(sessionId);
         const info = wacap.sessions.info(sessionId);
         return {
             id: userSession.id,

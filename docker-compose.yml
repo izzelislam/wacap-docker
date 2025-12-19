@@ -16,6 +16,8 @@ services:
   wacap:
     # Use pre-built image from Docker Hub
     image: bangfkr/wacap:latest
+    # Always pull latest image
+    pull_policy: always
     # Or build locally (uncomment below and comment image above)
     # build:
     #   context: .

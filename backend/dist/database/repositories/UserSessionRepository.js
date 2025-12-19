@@ -58,6 +58,18 @@ class UserSessionRepository {
         return stmt.all(userId);
     }
     /**
+     * List all sessions (for admin/system use)
+     */
+    listAll() {
+        const db = (0, database_1.getDatabase)();
+        const stmt = db.prepare(`
+      SELECT id, user_id, session_id, name, created_at
+      FROM user_sessions
+      ORDER BY created_at DESC
+    `);
+        return stmt.all();
+    }
+    /**
      * Delete a user session by session ID
      */
     delete(userId, sessionId) {

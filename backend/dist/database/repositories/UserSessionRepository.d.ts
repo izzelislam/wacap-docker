@@ -20,6 +20,10 @@ export declare class UserSessionRepository {
      */
     list(userId: number): UserSession[];
     /**
+     * List all sessions (for admin/system use)
+     */
+    listAll(): UserSession[];
+    /**
      * Delete a user session by session ID
      */
     delete(userId: number, sessionId: string): boolean;

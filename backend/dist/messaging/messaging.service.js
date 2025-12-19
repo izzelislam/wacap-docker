@@ -15,11 +15,19 @@ class MessagingService {
      */
     async sendText(userId, request) {
         const { sessionId, to, message, mentions } = request;
-        // Verify session ownership
-        if (!session_service_1.sessionService.belongsToUser(userId, sessionId)) {
+        // Verify session ownership and get session info
+        const session = session_service_1.sessionService.get(userId, sessionId);
+        if (!session) {
             return {
                 success: false,
                 error: 'Session not found or access denied',
+            };
+        }
+        // Check if session is connected
+        if (session.status !== 'connected') {
+            return {
+                success: false,
+                error: `Session is not connected. Current status: ${session.status}`,
             };
         }
         // Format phone number to JID
@@ -60,11 +68,19 @@ class MessagingService {
      */
     async sendMedia(userId, request) {
         const { sessionId, to, url, base64, mimetype, caption, fileName } = request;
-        // Verify session ownership
-        if (!session_service_1.sessionService.belongsToUser(userId, sessionId)) {
+        // Verify session ownership and get session info
+        const session = session_service_1.sessionService.get(userId, sessionId);
+        if (!session) {
             return {
                 success: false,
                 error: 'Session not found or access denied',
+            };
+        }
+        // Check if session is connected
+        if (session.status !== 'connected') {
+            return {
+                success: false,
+                error: `Session is not connected. Current status: ${session.status}`,
             };
         }
         // Validate media source
@@ -128,11 +144,19 @@ class MessagingService {
      */
     async sendLocation(userId, request) {
         const { sessionId, to, latitude, longitude, name, address } = request;
-        // Verify session ownership
-        if (!session_service_1.sessionService.belongsToUser(userId, sessionId)) {
+        // Verify session ownership and get session info
+        const session = session_service_1.sessionService.get(userId, sessionId);
+        if (!session) {
             return {
                 success: false,
                 error: 'Session not found or access denied',
+            };
+        }
+        // Check if session is connected
+        if (session.status !== 'connected') {
+            return {
+                success: false,
+                error: `Session is not connected. Current status: ${session.status}`,
             };
         }
         // Validate coordinates
@@ -185,11 +209,19 @@ class MessagingService {
      */
     async sendContact(userId, request) {
         const { sessionId, to, contact } = request;
-        // Verify session ownership
-        if (!session_service_1.sessionService.belongsToUser(userId, sessionId)) {
+        // Verify session ownership and get session info
+        const session = session_service_1.sessionService.get(userId, sessionId);
+        if (!session) {
             return {
                 success: false,
                 error: 'Session not found or access denied',
+            };
+        }
+        // Check if session is connected
+        if (session.status !== 'connected') {
+            return {
+                success: false,
+                error: `Session is not connected. Current status: ${session.status}`,
             };
         }
         // Validate contact info
@@ -228,6 +260,100 @@ class MessagingService {
             return {
                 success: false,
                 error: error instanceof Error ? error.message : 'Failed to send contact',
+            };
+        }
+    }
+    /**
+     * Send presence update (typing, recording, online, offline)
+     */
+    async sendPresence(userId, request) {
+        const { sessionId, to, presence } = request;
+        // Verify session ownership and get session info
+        const session = session_service_1.sessionService.get(userId, sessionId);
+        if (!session) {
+            return {
+                success: false,
+                error: 'Session not found or access denied',
+            };
+        }
+        // Check if session is connected
+        if (session.status !== 'connected') {
+            return {
+                success: false,
+                error: `Session is not connected. Current status: ${session.status}`,
+            };
+        }
+        // Format phone number to JID if provided
+        let jid = null;
+        if (to) {
+            try {
+                jid = (0, phone_utils_1.formatPhoneNumber)(to);
+            }
+            catch (error) {
+                return {
+                    success: false,
+                    error: error instanceof Error ? error.message : 'Invalid phone number',
+                };
+            }
+        }
+        try {
+            const wacap = (0, wacap_1.getWacap)();
+            await wacap.presence.update(sessionId, jid, presence);
+            return {
+                success: true,
+            };
+        }
+        catch (error) {
+            console.error('Send presence error:', error);
+            return {
+                success: false,
+                error: error instanceof Error ? error.message : 'Failed to send presence',
+            };
+        }
+    }
+    /**
+     * Mark messages as read
+     */
+    async markAsRead(userId, request) {
+        const { sessionId, to, messageIds } = request;
+        // Verify session ownership and get session info
+        const session = session_service_1.sessionService.get(userId, sessionId);
+        if (!session) {
+            return {
+                success: false,
+                error: 'Session not found or access denied',
+            };
+        }
+        // Check if session is connected
+        if (session.status !== 'connected') {
+            return {
+                success: false,
+                error: `Session is not connected. Current status: ${session.status}`,
+            };
+        }
+        // Format phone number to JID
+        let jid;
+        try {
+            jid = (0, phone_utils_1.formatPhoneNumber)(to);
+        }
+        catch (error) {
+            return {
+                success: false,
+                error: error instanceof Error ? error.message : 'Invalid phone number',
+            };
+        }
+        try {
+            const wacap = (0, wacap_1.getWacap)();
+            await wacap.chat.markAsRead(sessionId, jid, messageIds);
+            return {
+                success: true,
+            };
+        }
+        catch (error) {
+            console.error('Mark as read error:', error);
+            return {
+                success: false,
+                error: error instanceof Error ? error.message : 'Failed to mark as read',
             };
         }
     }

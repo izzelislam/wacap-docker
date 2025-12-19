@@ -11,7 +11,7 @@
     "test:watch": "vitest"
   },
   "dependencies": {
-    "@pakor/wacap-wrapper": "^1.0.0",
+    "@pakor/wacap-wrapper": "^1.0.6",
     "bcrypt": "^5.1.1",
     "better-sqlite3": "^11.6.0",
     "cors": "^2.8.5",

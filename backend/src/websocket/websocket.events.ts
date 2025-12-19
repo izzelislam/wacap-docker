@@ -201,18 +201,78 @@ export function setupWacapEventHandlers(wacap: WacapWrapper, io: Server): void {
     const from = (data as any).from;
     const messageType = (data as any).messageType;
     const isFromMe = (data as any).isFromMe;
+    // New fields from wacap-wrapper 1.0.5
+    const replyTo = (data as any).replyTo || from;
+    const phoneNumber = (data as any).phoneNumber || null;
+    const isLid = (data as any).isLid || from?.endsWith('@lid') || false;
+    const participant = (data as any).participant || null;
     
-    console.log(`[WS Event] Message received on session ${sessionId} from ${from}`);
+    console.log(`[WS Event] Message received on session ${sessionId} from ${from}, replyTo: ${replyTo}`);
+
+    // Extract detailed message info (WAHA-style)
+    const key = message?.key || {};
+    const messageContent = message?.message || {};
+    const pushName = message?.pushName || '';
+    
+    // Determine chat type
+    const isGroup = from?.endsWith('@g.us') || false;
+    const isStatus = from?.endsWith('@broadcast') || false;
+    
+    // Extract media info if present
+    const mediaMessage = messageContent?.imageMessage || 
+                         messageContent?.videoMessage || 
+                         messageContent?.audioMessage || 
+                         messageContent?.documentMessage ||
+                         messageContent?.stickerMessage || null;
+    
+    const hasMedia = !!mediaMessage;
+    const mediaInfo = hasMedia ? {
+      mimetype: mediaMessage?.mimetype || null,
+      fileLength: mediaMessage?.fileLength || null,
+      fileName: mediaMessage?.fileName || null,
+      caption: mediaMessage?.caption || null,
+      url: mediaMessage?.url || null,
+    } : null;
+
+    // Build comprehensive webhook payload (WAHA-style)
+    // replyTo and phoneNumber now come from wacap-wrapper which handles LID conversion
+    const webhookPayload = {
+      id: key?.id || '',
+      from: from || '',
+      to: key?.remoteJid || '',
+      // replyTo: The JID to use when replying to this message (from wrapper, handles LID)
+      replyTo,
+      // phoneNumber: Extracted phone number if available (from wrapper)
+      phoneNumber,
+      body: body || '',
+      hasMedia,
+      mediaInfo,
+      timestamp: Number(message?.messageTimestamp) || Date.now(),
+      isFromMe: isFromMe || false,
+      isGroup,
+      isStatus,
+      isLid,
+      participant: isGroup ? participant : null,
+      pushName,
+      messageType: messageType || 'unknown',
+      // Raw message for advanced usage
+      _data: {
+        key,
+        message: messageContent,
+        messageTimestamp: message?.messageTimestamp,
+        status: message?.status,
+      },
+    };
 
     // Forward all messages (including from self for confirmation)
     const event: MessageEvent = {
       sessionId,
       message: {
-        id: message?.key?.id || '',
+        id: key?.id || '',
         from,
         body: body || '',
         messageType: messageType || 'unknown',
-        timestamp: message?.messageTimestamp || Date.now(),
+        timestamp: Number(message?.messageTimestamp) || Date.now(),
         isFromMe: isFromMe || false,
       },
     };
@@ -220,15 +280,8 @@ export function setupWacapEventHandlers(wacap: WacapWrapper, io: Server): void {
     sendToSession(io, sessionId, 'message:received', event);
     broadcast(io, 'message:received', event);
 
-    // Trigger webhook
-    webhookService.trigger('message.received', sessionId, {
-      id: message?.key?.id || '',
-      from,
-      body: body || '',
-      messageType: messageType || 'unknown',
-      timestamp: message?.messageTimestamp || Date.now(),
-      isFromMe: isFromMe || false,
-    });
+    // Trigger webhook with comprehensive data
+    webhookService.trigger('message.received', sessionId, webhookPayload);
   });
 
   // Session error event
